@@ -18,6 +18,15 @@ mutex accum_mutex;
 mutex value_mutex;
 condition_variable cond_var;
 
+/* producer consumer variables */
+condition_variable empty_cond;
+condition_variable full_cond;
+mutex pc_mutex; 
+bool is_empty = true, bool is_full = false;
+int max_size = 500, size = 0;
+vector<int> goods;
+
+
 int square (int x) {
 	print_mutex.lock();
 	cout << "square(): thread id = " << this_thread::get_id() << endl;
@@ -78,26 +87,35 @@ void run_with_future () {
 }
 
 void producer_consumer () {
-	queue<int> goods;
-	int size = 500, count = 0;
 	bool done = false;
 	thread producer([&] () {
-		for (int i = 0; i < size; i++) {
-			goods.push(i);
-			count++;
+		while (true) {
+			unique_lock<mutex> lock(pc_mutex); /* acquire lock */
+			while (is_full) /* wait until goods is not full */
+				cond_full.wait(lock);
+			goods.push_back(i); 
+			size++;
+			/* buffer no longer empty */
+			is_empty = false; 
+			cond_empty.notify_one();
 		}
-		done = true;
 				});
 
 	thread consumer( [&] () {
-			while (!done) {
-				goods.pop();				
-				count--;
+			while (true) {
+				unique_lock<mutex> lock(pc_mutex); /* acquire lock */
+				while (is_empty) /* wait until goods is not empty */
+					cond_empty.wait(lock);
+				goods.pop_back(); 
+				size--;
+				/* buffer no longer full */
+				is_full = false; 
+				cond_full.notify_one();
 			}
 				});
 	producer.join();
 	consumer.join();
-	cout << "net: " << count << endl;
+	cout << "net: " << size << endl;
 }
 
 int main () {
