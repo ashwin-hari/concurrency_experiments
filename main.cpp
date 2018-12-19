@@ -1,11 +1,14 @@
 #include <iostream>
 #include <chrono>
 #include <vector>
+#include <queue>
 #include <thread>
 #include <future>
 #include <atomic>
 #include <mutex>
 #include <condition_variable>
+
+
 
 using namespace std;
 
@@ -13,11 +16,13 @@ mutex print_mutex;
 mutex accum_mutex;
 
 mutex value_mutex;
-conditon_variable cond_var;
+condition_variable cond_var;
 
 int square (int x) {
+	print_mutex.lock();
 	cout << "square(): thread id = " << this_thread::get_id() << endl;
 	cout << "square(): x = " << x << endl;
+	print_mutex.unlock();
 	return x * x;
 	this_thread::sleep_for(chrono::milliseconds(100));
 }
@@ -72,16 +77,38 @@ void run_with_future () {
 	cout << "accum: " << accum << endl;
 }
 
+void producer_consumer () {
+	queue<int> goods;
+	int size = 500, count = 0;
+	bool done = false;
+	thread producer([&] () {
+		for (int i = 0; i < size; i++) {
+			goods.push(i);
+			count++;
+		}
+		done = true;
+				});
+
+	thread consumer( [&] () {
+			while (!done) {
+				goods.pop();				
+				count--;
+			}
+				});
+	producer.join();
+	consumer.join();
+	cout << "net: " << count << endl;
+}
+
 int main () {
 	// run the accumulator	
 	run_with_threads();
 	cout << "main: " << this_thread::get_id() << endl;
 	run_with_future();
-	return 0;
 
 	// condition variables
 	int value = 100; 
-	bool notified = true;
+	bool notified = false;
 	
 	thread get_value ([&] () {
 		unique_lock<mutex> lock(value_mutex); // lock value_mutex
@@ -101,6 +128,6 @@ int main () {
 
 	get_value.join();
 	change_value.join();
-	
+
 	return 0;
 }
